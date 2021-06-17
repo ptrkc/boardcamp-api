@@ -47,22 +47,19 @@ app.post("/categories", async (req, res) => {
 
 app.get("/games", async (req, res) => {
     let name = nameValidation(req.query);
-    let dbQuery = "SELECT * FROM games";
-    let gamesSelect;
+    let dbQuery = `
+    SELECT games.*, categories.name AS "categoryName"
+    FROM games JOIN categories ON games."categoryId" = categories.id`;
+    let games;
     try {
         if (name) {
             name += "%";
-            dbQuery += " WHERE name ILIKE $1";
-            gamesSelect = await db.query(dbQuery, [name]);
+            dbQuery += " WHERE games.name ILIKE $1";
+            games = await db.query(dbQuery, [name]);
         } else {
-            gamesSelect = await db.query(dbQuery);
+            games = await db.query(dbQuery);
         }
-        const categories = await db.query("SELECT * FROM categories");
-        const games = gamesSelect.rows.map((g) => {
-            const category = categories.rows.find((c) => c.id === g.categoryId);
-            return { ...g, categoryName: category.name };
-        });
-        res.send(games);
+        res.send(games.rows);
     } catch (e) {
         console.log(e);
         res.sendStatus(500);

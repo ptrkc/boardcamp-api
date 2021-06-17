@@ -1,14 +1,11 @@
 import express from "express";
 import cors from "cors";
-import pg from "pg";
-import dbConfig from "./dbConfig.js";
+import db from "./dbConfig.js";
 import {
     nameValidation,
     cpfValidation,
     gameValidation,
 } from "./functions/validations.js";
-
-const db = new pg.Pool(dbConfig);
 
 const app = express();
 app.use(express.json());

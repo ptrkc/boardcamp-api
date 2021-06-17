@@ -122,6 +122,27 @@ app.get("/customers", async (req, res) => {
     }
 });
 
+app.get("/customers/:id", async (req, res) => {
+    let id = req.params && req.params.id;
+    if (!/\d+/.test(id)) {
+        res.sendStatus(400);
+        return;
+    }
+    let dbQuery = "SELECT * FROM customers WHERE id = $1";
+    let customersSelect;
+    try {
+        customersSelect = await db.query(dbQuery, [id]);
+        if (customersSelect.rows.length === 0) {
+            res.sendStatus(404);
+        } else {
+            res.send(customersSelect.rows[0]);
+        }
+    } catch (e) {
+        console.log(e);
+        res.sendStatus(500);
+    }
+});
+
 app.listen(4000, () => {
     console.log("Server started on port 4000.");
 });

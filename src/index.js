@@ -2,7 +2,11 @@ import express from "express";
 import cors from "cors";
 import pg from "pg";
 import dbConfig from "./dbConfig.js";
-import { nameValidation, gameValidation } from "./functions/validations.js";
+import {
+    nameValidation,
+    cpfValidation,
+    gameValidation,
+} from "./functions/validations.js";
 
 const db = new pg.Pool(dbConfig);
 
@@ -95,6 +99,25 @@ app.post("/games", async (req, res) => {
         await db.query(dbQuery, queryParams);
         res.sendStatus(201);
     } catch (e) {
+        res.sendStatus(500);
+    }
+});
+
+app.get("/customers", async (req, res) => {
+    let cpf = cpfValidation(req.query);
+    let dbQuery = "SELECT * FROM customers";
+    let customersSelect;
+    try {
+        if (cpf) {
+            cpf += "%";
+            dbQuery += " WHERE cpf ILIKE $1";
+            customersSelect = await db.query(dbQuery, [cpf]);
+        } else {
+            customersSelect = await db.query(dbQuery);
+        }
+        res.send(customersSelect.rows);
+    } catch (e) {
+        console.log(e);
         res.sendStatus(500);
     }
 });

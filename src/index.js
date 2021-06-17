@@ -2,7 +2,7 @@ import express from "express";
 import cors from "cors";
 import pg from "pg";
 import dbConfig from "./dbConfig.js";
-import { nameValidation } from "./functions/validations.js";
+import { nameValidation, gameValidation } from "./functions/validations.js";
 
 const db = new pg.Pool(dbConfig);
 
@@ -61,6 +61,40 @@ app.get("/games", async (req, res) => {
         res.send(games);
     } catch (e) {
         console.log(e);
+        res.sendStatus(500);
+    }
+});
+
+app.post("/games", async (req, res) => {
+    const game = gameValidation(req.body);
+    if (!game) {
+        res.sendStatus(400);
+        return;
+    }
+    const { name, image, stockTotal, categoryId, pricePerDay } = game;
+    const queryParams = [name, image, stockTotal, categoryId, pricePerDay];
+    const dbQuery =
+        'INSERT INTO games (name, image, "stockTotal", "categoryId", "pricePerDay") VALUES ($1, $2, $3, $4, $5)';
+    try {
+        const checkCategory = await db.query(
+            "SELECT * FROM categories where id = $1",
+            [categoryId]
+        );
+        if (checkCategory.rows.length === 0) {
+            res.sendStatus(400);
+            return;
+        }
+        const checkName = await db.query(
+            "SELECT * FROM games where name = $1",
+            [name]
+        );
+        if (checkName.rows.length !== 0) {
+            res.sendStatus(409);
+            return;
+        }
+        await db.query(dbQuery, queryParams);
+        res.sendStatus(201);
+    } catch (e) {
         res.sendStatus(500);
     }
 });

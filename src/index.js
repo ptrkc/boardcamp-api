@@ -118,7 +118,7 @@ app.get("/customers", async (req, res) => {
 });
 
 app.get("/customers/:id", async (req, res) => {
-    let id = req.params && req.params.id;
+    const id = parseInt(req.params && req.params.id);
     if (!/\d+/.test(id)) {
         res.sendStatus(400);
         return;
@@ -159,6 +159,51 @@ app.post("/customers", async (req, res) => {
         }
         await db.query(dbQuery, queryParams);
         res.sendStatus(201);
+    } catch (e) {
+        res.sendStatus(500);
+    }
+});
+
+app.put("/customers/:id", async (req, res) => {
+    const id = parseInt(req.params && req.params.id);
+    if (!/\d+/.test(id)) {
+        res.sendStatus(400);
+        return;
+    }
+    const customer = customerValidation(req.body);
+    if (!customer) {
+        res.sendStatus(400);
+        return;
+    }
+    const { name, phone, cpf, birthday } = customer;
+    const queryParams = [name, phone, cpf, birthday, id];
+    const checkQuery = `
+    SELECT * FROM customers WHERE id = $1 
+    UNION 
+    SELECT * FROM customers WHERE cpf = $2`;
+    const editQuery =
+        "UPDATE customers SET (name, phone, cpf, birthday) = ($1, $2, $3, $4) WHERE id = $5";
+    try {
+        const preCheck = await db.query(checkQuery, [id, cpf]);
+        console.log(preCheck.rows);
+        if (preCheck.rows.length === 2) {
+            res.sendStatus(409);
+            return;
+        }
+        if (preCheck.rows.length === 1) {
+            if (preCheck.rows[0].id !== id) {
+                console.log(1);
+                res.sendStatus(404);
+                return;
+            }
+        }
+        if (preCheck.rows.length === 0) {
+            console.log(2);
+            res.sendStatus(404);
+            return;
+        }
+        await db.query(editQuery, queryParams);
+        res.sendStatus(200);
     } catch (e) {
         res.sendStatus(500);
     }

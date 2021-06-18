@@ -249,6 +249,21 @@ app.get("/rentals", async (req, res) => {
     }
 });
 
+app.get("/rentals/metrics", async (req, res) => {
+    const [filters, params] = setStartAndEndDate(req.query);
+    let dbQuery = `
+    SELECT q1.*, (q1.revenue / q1.rentals) AS average 
+    FROM (SELECT SUM("originalPrice" + COALESCE("delayFee",0)) AS "revenue" , 
+    COUNT(id) as "rentals" FROM rentals ${filters}) q1`;
+    try {
+        const rentals = await db.query(dbQuery, params);
+        res.send(rentals.rows);
+    } catch (e) {
+        console.log(e);
+        res.sendStatus(500);
+    }
+});
+
 app.post("/rentals", async (req, res) => {
     const rental = rentalValidation(req.body);
     if (!rental) {
@@ -477,11 +492,38 @@ function filterRentals(query) {
         }
         if (startDate) {
             filters += ` rentals."rentDate" >= $${counter} AND `;
-            params.push(`"${startDate}"`);
+            params.push(`'${startDate}'`);
             counter++;
         }
     }
 
+    filters = filters.substring(filters.length - 4, 0);
+    return [filters, params];
+}
+
+function setStartAndEndDate(query) {
+    let counter = 1;
+    const params = [];
+    let filters = "";
+    const startDate = dayjs(query.startDate, "YYYY-MM-DD", true).isValid()
+        ? query.startDate
+        : false;
+    const endDate = dayjs(query.endDate, "YYYY-MM-DD", true).isValid()
+        ? query.endDate
+        : false;
+    if (startDate || endDate) {
+        filters = " WHERE ";
+        if (startDate) {
+            filters += ` rentals."rentDate" >= $${counter} AND `;
+            params.push(`'${startDate}'`);
+            counter++;
+        }
+        if (endDate) {
+            filters += ` rentals."rentDate" <= $${counter} AND `;
+            params.push(`'${endDate}'`);
+            counter++;
+        }
+    }
     filters = filters.substring(filters.length - 4, 0);
     return [filters, params];
 }

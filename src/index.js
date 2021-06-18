@@ -233,44 +233,16 @@ app.get("/rentals", async (req, res) => {
     const order = setOrder(req.route.path, req.query);
     const offsetAndLimit = setOffsetAndLimit(req.query);
     const [filters, params] = filterRentals(req.query);
-    let dbQuery = `
-    SELECT 
-    q1.* , q2."categoryName"
-    FROM 
-        (SELECT 
-        rentals.*, customers.name AS "customerName", games.name AS "gameName", games."categoryId"
-        FROM
-        rentals JOIN customers ON rentals."customerId" = customers.id
-        JOIN 
-        games ON rentals."gameId" = games.id ${filters}) q1 
-    JOIN 
-        (SELECT categories.name as "categoryName", categories.id FROM categories) q2 
-    ON q1."categoryId" = q2.id ${order} ${offsetAndLimit}`;
+    let dbQuery = `SELECT rentals.*, 
+    jsonb_build_object('name', customers.name, 'id', customers.id) AS customer,
+    jsonb_build_object('id', games.id, 'name', games.name, 'categoryId', games."categoryId", 'categoryName', categories.name) AS game            
+    FROM rentals 
+    JOIN customers ON rentals."customerId" = customers.id
+    JOIN games ON rentals."gameId" = games.id
+    JOIN categories ON categories.id = games."categoryId" ${filters} ${order} ${offsetAndLimit}`;
     try {
-        const rawRentals = await db.query(dbQuery, params);
-        const rentals = rawRentals.rows.map((r) => {
-            return {
-                id: r.id,
-                customerId: r.customerId,
-                gameId: r.gameId,
-                rentDate: r.rentDate,
-                daysRented: r.daysRented,
-                returnDate: r.returnDate,
-                originalPrice: r.originalPrice,
-                delayFee: r.delayFee,
-                customer: {
-                    id: r.customerId,
-                    name: r.customerName,
-                },
-                game: {
-                    id: r.gameId,
-                    name: r.gameName,
-                    categoryId: r.categoryId,
-                    categoryName: r.categoryName,
-                },
-            };
-        });
-        res.send(rentals);
+        const rentals = await db.query(dbQuery, params);
+        res.send(rentals.rows);
     } catch (e) {
         console.log(e);
         res.sendStatus(500);
@@ -511,6 +483,5 @@ function filterRentals(query) {
     }
 
     filters = filters.substring(filters.length - 4, 0);
-    console.log(customerId, gameId, status, startDate);
     return [filters, params];
 }

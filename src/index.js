@@ -9,7 +9,12 @@ import {
     rentalValidation,
     integerValidation,
 } from "./functions/validations.js";
-
+import {
+    setStartAndEndDate,
+    filterRentals,
+    setOffsetAndLimit,
+    setOrder,
+} from "./functions/sortersAndFilters.js";
 import formatParser from "dayjs/plugin/customParseFormat.js";
 
 dayjs.extend(formatParser);
@@ -66,10 +71,11 @@ app.get("/games", async (req, res) => {
         params = [name];
     }
     let dbQuery = `
-    SELECT games.*, categories.name AS "categoryName"
-    FROM games JOIN categories 
-    ON games."categoryId" = categories.id ${filters} ${order} ${offsetAndLimit}`;
-
+    SELECT games.*, q1."rentalsCount" 
+    FROM games 
+    JOIN (SELECT rentals."gameId", count(rentals.id) as "rentalsCount" FROM rentals GROUP BY rentals."gameId") q1 
+    ON q1."gameId" = games.id ${filters} ${order} ${offsetAndLimit}
+    `;
     try {
         const games = await db.query(dbQuery, params);
         res.send(games.rows);
@@ -125,7 +131,11 @@ app.get("/customers", async (req, res) => {
         filters = " WHERE cpf ILIKE $1 ";
         params = [cpf];
     }
-    let dbQuery = `SELECT * FROM customers ${filters} ${order} ${offsetAndLimit}`;
+    let dbQuery = `
+    SELECT customers.*, q1."rentalsCount" 
+    FROM customers 
+    JOIN (SELECT rentals."customerId", count(rentals.id) as "rentalsCount" FROM rentals GROUP BY rentals."customerId") q1 
+    ON q1."customerId" = customers.id ${filters} ${order} ${offsetAndLimit}`;
     try {
         const customersSelect = await db.query(dbQuery, params);
         res.send(customersSelect.rows);
@@ -141,7 +151,10 @@ app.get("/customers/:id", async (req, res) => {
         res.sendStatus(400);
         return;
     }
-    let dbQuery = "SELECT * FROM customers WHERE id = $1";
+    let dbQuery = `SELECT customers.*, q1."rentalsCount" 
+    FROM customers 
+    JOIN (SELECT rentals."customerId", count(rentals.id) as "rentalsCount" FROM rentals GROUP BY rentals."customerId") q1 
+    ON q1."customerId" = customers.id WHERE id = $1`;
     let customersSelect;
     try {
         customersSelect = await db.query(dbQuery, [id]);
@@ -385,145 +398,3 @@ app.delete("/rentals/:id", async (req, res) => {
 app.listen(4000, () => {
     console.log("Server started on port 4000.");
 });
-
-function setOffsetAndLimit(object) {
-    let filters = "";
-    const offset = integerValidation(object.offset);
-    const limit = integerValidation(object.limit);
-
-    if (offset) {
-        filters += ` OFFSET ${offset}`;
-    }
-    if (limit) {
-        filters += ` LIMIT ${limit}`;
-    }
-    return filters;
-}
-
-function setOrder(path, query) {
-    let order = "";
-    let desc = "ASC";
-    if (!query.order) {
-        return order;
-    }
-    if (query.desc === "true") {
-        desc = "DESC";
-    }
-    const categories = ["id", "name"];
-    const customers = ["id", "name", "phone", "cpf", "birthday"];
-    const games = [
-        "id",
-        "name",
-        "image",
-        "stockTotal",
-        "categoryId",
-        "pricePerDay",
-        "categoryName",
-    ];
-    const rentals = [
-        "id",
-        "customerId",
-        "gameId",
-        "rentDate",
-        "daysRented",
-        "returnDate",
-        "originalPrice",
-        "delayFee",
-        "customerName",
-        "gameName",
-        "categoryId",
-        "categoryName",
-    ];
-
-    switch (path) {
-        case "/categories":
-            if (categories.includes(query.order)) {
-                order = query.order;
-            }
-            break;
-        case "/customers":
-            if (customers.includes(query.order)) {
-                order = query.order;
-            }
-            break;
-        case "/games":
-            if (games.includes(query.order)) {
-                order = query.order;
-            }
-            break;
-        case "/rentals":
-            if (rentals.includes(query.order)) {
-                order = query.order;
-            }
-            break;
-    }
-    return ` ORDER BY "${order}" ${desc} `;
-}
-
-function filterRentals(query) {
-    let counter = 1;
-    const params = [];
-    let filters = "";
-    const customerId = integerValidation(query.customerId);
-    const gameId = integerValidation(query.gameId);
-    const status =
-        query.status === "open" || query.status === "closed"
-            ? query.status
-            : false;
-    const startDate = dayjs(query.startDate, "YYYY-MM-DD", true).isValid()
-        ? query.startDate
-        : false;
-    if (customerId || gameId || status || startDate) {
-        filters = " WHERE ";
-        if (customerId) {
-            filters += ` rentals."customerId" = $${counter} AND `;
-            params.push(customerId);
-            counter++;
-        }
-        if (gameId) {
-            filters += ` rentals."gameId" = $${counter} AND `;
-            params.push(gameId);
-            counter++;
-        }
-        if (status) {
-            filters += ` rentals."returnDate" IS ${
-                status === "closed" ? "NOT" : ""
-            } NULL AND `;
-        }
-        if (startDate) {
-            filters += ` rentals."rentDate" >= $${counter} AND `;
-            params.push(`'${startDate}'`);
-            counter++;
-        }
-    }
-
-    filters = filters.substring(filters.length - 4, 0);
-    return [filters, params];
-}
-
-function setStartAndEndDate(query) {
-    let counter = 1;
-    const params = [];
-    let filters = "";
-    const startDate = dayjs(query.startDate, "YYYY-MM-DD", true).isValid()
-        ? query.startDate
-        : false;
-    const endDate = dayjs(query.endDate, "YYYY-MM-DD", true).isValid()
-        ? query.endDate
-        : false;
-    if (startDate || endDate) {
-        filters = " WHERE ";
-        if (startDate) {
-            filters += ` rentals."rentDate" >= $${counter} AND `;
-            params.push(`'${startDate}'`);
-            counter++;
-        }
-        if (endDate) {
-            filters += ` rentals."rentDate" <= $${counter} AND `;
-            params.push(`'${endDate}'`);
-            counter++;
-        }
-    }
-    filters = filters.substring(filters.length - 4, 0);
-    return [filters, params];
-}

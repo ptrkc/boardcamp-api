@@ -329,6 +329,71 @@ app.post("/rentals", async (req, res) => {
     }
 });
 
+app.post("/rentals/:id/return", async (req, res) => {
+    const id = integerValidation(req.params.id);
+    if (!id) {
+        res.sendStatus(404);
+        return;
+    }
+    try {
+        const rental = await db.query("SELECT * FROM rentals WHERE id = $1", [
+            id,
+        ]);
+        if (rental.rows.length === 0) {
+            res.sendStatus(404);
+            return;
+        }
+        const { rentDate, daysRented, returnDate, originalPrice } =
+            rental.rows[0];
+        if (returnDate !== null) {
+            res.sendStatus(400);
+            return;
+        }
+        const today = dayjs().format("YYYY-MM-DD");
+        const lateDays = dayjs(today).diff(rentDate, "day") - daysRented;
+        const delayFee =
+            lateDays > 0 ? lateDays * (originalPrice / daysRented) : null;
+
+        const editQuery = `
+            UPDATE rentals SET ("returnDate", "delayFee") = ($1, $2) WHERE id = $3`;
+        const editParams = [today, delayFee, id];
+        await db.query(editQuery, editParams);
+        res.sendStatus(200);
+    } catch (e) {
+        console.log(e);
+        res.sendStatus(500);
+    }
+});
+
+app.delete("/rentals/:id", async (req, res) => {
+    const id = integerValidation(req.params.id);
+    if (!id) {
+        res.sendStatus(404);
+        return;
+    }
+    try {
+        const rental = await db.query("SELECT * FROM rentals WHERE id = $1", [
+            id,
+        ]);
+        if (rental.rows.length === 0) {
+            res.sendStatus(404);
+            return;
+        }
+        const { returnDate } = rental.rows[0];
+        if (returnDate !== null) {
+            res.sendStatus(400);
+            return;
+        }
+        const deleteQuery = `
+            DELETE FROM rentals WHERE id = $1`;
+        await db.query(deleteQuery, [id]);
+        res.sendStatus(200);
+    } catch (e) {
+        console.log(e);
+        res.sendStatus(500);
+    }
+});
+
 app.listen(4000, () => {
     console.log("Server started on port 4000.");
 });

@@ -15,8 +15,10 @@ app.use(express.json());
 app.use(cors());
 
 app.get("/categories", async (req, res) => {
+    const filters = offsetAndLimit(req.query);
+    let query = "SELECT * FROM categories" + filters;
     try {
-        const categories = await db.query("SELECT * FROM categories");
+        const categories = await db.query(query);
         res.send(categories.rows);
     } catch (e) {
         console.log(e);
@@ -49,18 +51,19 @@ app.post("/categories", async (req, res) => {
 
 app.get("/games", async (req, res) => {
     let name = nameValidation(req.query);
+    const filters = offsetAndLimit(req.query);
     let dbQuery = `
     SELECT games.*, categories.name AS "categoryName"
     FROM games JOIN categories ON games."categoryId" = categories.id`;
-    let games;
+    let params = [];
+    if (name) {
+        name += "%";
+        dbQuery += " WHERE games.name ILIKE $1";
+        params = [name];
+    }
+    dbQuery += filters;
     try {
-        if (name) {
-            name += "%";
-            dbQuery += " WHERE games.name ILIKE $1";
-            games = await db.query(dbQuery, [name]);
-        } else {
-            games = await db.query(dbQuery);
-        }
+        const games = await db.query(dbQuery, params);
         res.send(games.rows);
     } catch (e) {
         console.log(e);
@@ -104,17 +107,18 @@ app.post("/games", async (req, res) => {
 });
 
 app.get("/customers", async (req, res) => {
+    const filters = offsetAndLimit(req.query);
     let cpf = integerValidation(req.query.cpf);
     let dbQuery = "SELECT * FROM customers";
-    let customersSelect;
+    let params = [];
+    if (cpf) {
+        cpf += "%";
+        dbQuery += " WHERE cpf ILIKE $1";
+        params = [cpf];
+    }
+    dbQuery += filters;
     try {
-        if (cpf) {
-            cpf += "%";
-            dbQuery += " WHERE cpf ILIKE $1";
-            customersSelect = await db.query(dbQuery, [cpf]);
-        } else {
-            customersSelect = await db.query(dbQuery);
-        }
+        const customersSelect = await db.query(dbQuery, params);
         res.send(customersSelect.rows);
     } catch (e) {
         console.log(e);
@@ -219,6 +223,7 @@ app.put("/customers/:id", async (req, res) => {
 app.get("/rentals", async (req, res) => {
     const customerId = integerValidation(req.query.customerId);
     const gameId = integerValidation(req.query.gameId);
+    const extraFilters = offsetAndLimit(req.query);
     let filters = "";
     let params = [];
     if (customerId && gameId) {
@@ -243,8 +248,7 @@ app.get("/rentals", async (req, res) => {
         games ON rentals."gameId" = games.id ${filters}) q1 
     JOIN 
         (SELECT categories.name as "categoryName", categories.id FROM categories) q2 
-    ON q1."categoryId" = q2.id;
-    `;
+    ON q1."categoryId" = q2.id ${extraFilters}`;
     try {
         const rawRentals = await db.query(dbQuery, params);
         const rentals = rawRentals.rows.map((r) => {
@@ -397,3 +401,17 @@ app.delete("/rentals/:id", async (req, res) => {
 app.listen(4000, () => {
     console.log("Server started on port 4000.");
 });
+
+function offsetAndLimit(object) {
+    let filters = "";
+    const offset = integerValidation(object.offset);
+    const limit = integerValidation(object.limit);
+
+    if (offset) {
+        filters += ` OFFSET ${offset}`;
+    }
+    if (limit) {
+        filters += ` LIMIT ${limit}`;
+    }
+    return filters;
+}

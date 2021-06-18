@@ -16,7 +16,7 @@ export async function getGames(req, res) {
     let dbQuery = `
     SELECT games.*, q1."rentalsCount" 
     FROM games 
-    JOIN (SELECT rentals."gameId", count(rentals.id) as "rentalsCount" FROM rentals GROUP BY rentals."gameId") q1 
+    LEFT JOIN (SELECT rentals."gameId", count(rentals.id) as "rentalsCount" FROM rentals GROUP BY rentals."gameId") q1 
     ON q1."gameId" = games.id ${filters} ${order} ${offsetAndLimit}
     `;
     try {

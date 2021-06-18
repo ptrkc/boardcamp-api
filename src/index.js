@@ -1,7 +1,5 @@
 import express from "express";
 import cors from "cors";
-import dayjs from "dayjs";
-import formatParser from "dayjs/plugin/customParseFormat.js";
 import { getCategories, postCategories } from "./routes/categories.js";
 import { getGames, postGames } from "./routes/games.js";
 import {
@@ -17,8 +15,6 @@ import {
     postRentals,
     postRentalsReturn,
 } from "./routes/rentals.js";
-
-dayjs.extend(formatParser);
 
 const app = express();
 app.use(express.json());

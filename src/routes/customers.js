@@ -19,7 +19,7 @@ export async function getCustomers(req, res) {
     let dbQuery = `
     SELECT customers.*, q1."rentalsCount" 
     FROM customers 
-    JOIN (SELECT rentals."customerId", count(rentals.id) as "rentalsCount" FROM rentals GROUP BY rentals."customerId") q1 
+    LEFT JOIN (SELECT rentals."customerId", count(rentals.id) as "rentalsCount" FROM rentals GROUP BY rentals."customerId") q1 
     ON q1."customerId" = customers.id ${filters} ${order} ${offsetAndLimit}`;
     try {
         const customersSelect = await db.query(dbQuery, params);
@@ -38,7 +38,7 @@ export async function getCustomersId(req, res) {
     }
     let dbQuery = `SELECT customers.*, q1."rentalsCount" 
     FROM customers 
-    JOIN (SELECT rentals."customerId", count(rentals.id) as "rentalsCount" FROM rentals GROUP BY rentals."customerId") q1 
+    LEFT JOIN (SELECT rentals."customerId", count(rentals.id) as "rentalsCount" FROM rentals GROUP BY rentals."customerId") q1 
     ON q1."customerId" = customers.id WHERE id = $1`;
     let customersSelect;
     try {

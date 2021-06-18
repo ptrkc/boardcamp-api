@@ -12,14 +12,6 @@ export function nameValidation(object) {
     return error ? false : object.name.trim();
 }
 
-export function cpfValidation(object) {
-    const schema = joi.object({
-        cpf: joi.number().integer().required(),
-    });
-    const error = schema.validate(object, { allowUnknown: true }).error;
-    return error ? false : object.cpf;
-}
-
 export function gameValidation(object) {
     const urlRegEx =
         /^https?:\/\/(www\.)?[-a-zA-Z0-9@:%._+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_+.~#?&//=]*)/;
@@ -73,4 +65,9 @@ export function rentalValidation(object) {
     });
     const error = schema.validate(object).error;
     return error ? false : object;
+}
+
+export function integerValidation(str) {
+    const isInt = parseInt(str) > 0;
+    return isInt ? parseInt(str) : false;
 }

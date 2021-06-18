@@ -4,10 +4,10 @@ import db from "./dbConfig.js";
 import dayjs from "dayjs";
 import {
     nameValidation,
-    cpfValidation,
     gameValidation,
     customerValidation,
     rentalValidation,
+    integerValidation,
 } from "./functions/validations.js";
 
 const app = express();
@@ -104,7 +104,7 @@ app.post("/games", async (req, res) => {
 });
 
 app.get("/customers", async (req, res) => {
-    let cpf = cpfValidation(req.query);
+    let cpf = integerValidation(req.query.cpf);
     let dbQuery = "SELECT * FROM customers";
     let customersSelect;
     try {
@@ -123,8 +123,8 @@ app.get("/customers", async (req, res) => {
 });
 
 app.get("/customers/:id", async (req, res) => {
-    const id = parseInt(req.params && req.params.id);
-    if (!/\d+/.test(id)) {
+    const id = integerValidation(req.params.id);
+    if (!id) {
         res.sendStatus(400);
         return;
     }
@@ -210,6 +210,66 @@ app.put("/customers/:id", async (req, res) => {
         }
         await db.query(editQuery, queryParams);
         res.sendStatus(200);
+    } catch (e) {
+        console.log(e);
+        res.sendStatus(500);
+    }
+});
+
+app.get("/rentals", async (req, res) => {
+    const customerId = integerValidation(req.query.customerId);
+    const gameId = integerValidation(req.query.gameId);
+    let filters = "";
+    let params = [];
+    if (customerId && gameId) {
+        filters = 'WHERE rentals."customerId" = $1 AND rentals."gameId" = $2';
+        params = [customerId, gameId];
+    } else if (customerId) {
+        filters = 'WHERE rentals."customerId" = $1';
+        params = [customerId];
+    } else if (gameId) {
+        filters = 'WHERE rentals."gameId" = $1';
+        params = [gameId];
+    }
+    let dbQuery = `
+    SELECT 
+    q1.* , q2."categoryName"
+    FROM 
+        (SELECT 
+        rentals.*, customers.name AS "customerName", games.name AS "gameName", games."categoryId"
+        FROM
+        rentals JOIN customers ON rentals."customerId" = customers.id
+        JOIN 
+        games ON rentals."gameId" = games.id ${filters}) q1 
+    JOIN 
+        (SELECT categories.name as "categoryName", categories.id FROM categories) q2 
+    ON q1."categoryId" = q2.id;
+    `;
+    try {
+        const rawRentals = await db.query(dbQuery, params);
+        const rentals = rawRentals.rows.map((r) => {
+            return {
+                id: r.id,
+                customerId: r.customerId,
+                gameId: r.gameId,
+                rentDate: r.rentDate,
+                daysRented: r.daysRented,
+                returnDate: r.returnDate,
+                originalPrice: r.originalPrice,
+                delayFee: r.delayFee,
+                customer: {
+                    id: r.customerId,
+                    name: r.customerName,
+                },
+                game: {
+                    id: r.gameId,
+                    name: r.gameName,
+                    categoryId: r.categoryId,
+                    categoryName: r.categoryName,
+                },
+            };
+        });
+        res.send(rentals);
     } catch (e) {
         console.log(e);
         res.sendStatus(500);

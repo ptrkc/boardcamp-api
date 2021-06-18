@@ -64,3 +64,13 @@ export function customerValidation(object) {
               birthday: object.birthday.trim(),
           };
 }
+
+export function rentalValidation(object) {
+    const schema = joi.object({
+        customerId: joi.number().integer().min(1).required(),
+        gameId: joi.number().integer().min(1).required(),
+        daysRented: joi.number().integer().min(1).required(),
+    });
+    const error = schema.validate(object).error;
+    return error ? false : object;
+}

@@ -1,11 +1,13 @@
 import express from "express";
 import cors from "cors";
 import db from "./dbConfig.js";
+import dayjs from "dayjs";
 import {
     nameValidation,
     cpfValidation,
     gameValidation,
     customerValidation,
+    rentalValidation,
 } from "./functions/validations.js";
 
 const app = express();
@@ -17,6 +19,7 @@ app.get("/categories", async (req, res) => {
         const categories = await db.query("SELECT * FROM categories");
         res.send(categories.rows);
     } catch (e) {
+        console.log(e);
         res.sendStatus(500);
     }
 });
@@ -39,6 +42,7 @@ app.post("/categories", async (req, res) => {
         await db.query("INSERT INTO categories (name) VALUES ($1)", [category]);
         res.sendStatus(201);
     } catch (e) {
+        console.log(e);
         res.sendStatus(500);
     }
 });
@@ -71,9 +75,9 @@ app.post("/games", async (req, res) => {
         return;
     }
     const { name, image, stockTotal, categoryId, pricePerDay } = game;
-    const queryParams = [name, image, stockTotal, categoryId, pricePerDay];
     const dbQuery =
         'INSERT INTO games (name, image, "stockTotal", "categoryId", "pricePerDay") VALUES ($1, $2, $3, $4, $5)';
+    const queryParams = [name, image, stockTotal, categoryId, pricePerDay];
     try {
         const checkCategory = await db.query(
             "SELECT * FROM categories where id = $1",
@@ -94,6 +98,7 @@ app.post("/games", async (req, res) => {
         await db.query(dbQuery, queryParams);
         res.sendStatus(201);
     } catch (e) {
+        console.log(e);
         res.sendStatus(500);
     }
 });
@@ -145,9 +150,10 @@ app.post("/customers", async (req, res) => {
         return;
     }
     const { name, phone, cpf, birthday } = customer;
-    const queryParams = [name, phone, cpf, birthday];
     const dbQuery =
         "INSERT INTO customers (name, phone, cpf, birthday) VALUES ($1, $2, $3, $4)";
+    const queryParams = [name, phone, cpf, birthday];
+
     try {
         const checkCPF = await db.query(
             "SELECT * FROM customers where cpf = $1",
@@ -160,6 +166,7 @@ app.post("/customers", async (req, res) => {
         await db.query(dbQuery, queryParams);
         res.sendStatus(201);
     } catch (e) {
+        console.log(e);
         res.sendStatus(500);
     }
 });
@@ -176,15 +183,16 @@ app.put("/customers/:id", async (req, res) => {
         return;
     }
     const { name, phone, cpf, birthday } = customer;
-    const queryParams = [name, phone, cpf, birthday, id];
     const checkQuery = `
-    SELECT * FROM customers WHERE id = $1 
-    UNION 
-    SELECT * FROM customers WHERE cpf = $2`;
+        SELECT * FROM customers WHERE id = $1 
+        UNION 
+        SELECT * FROM customers WHERE cpf = $2`;
+    const checkParams = [id, cpf];
     const editQuery =
         "UPDATE customers SET (name, phone, cpf, birthday) = ($1, $2, $3, $4) WHERE id = $5";
+    const queryParams = [name, phone, cpf, birthday, id];
     try {
-        const preCheck = await db.query(checkQuery, [id, cpf]);
+        const preCheck = await db.query(checkQuery, checkParams);
         console.log(preCheck.rows);
         if (preCheck.rows.length === 2) {
             res.sendStatus(409);
@@ -192,19 +200,71 @@ app.put("/customers/:id", async (req, res) => {
         }
         if (preCheck.rows.length === 1) {
             if (preCheck.rows[0].id !== id) {
-                console.log(1);
                 res.sendStatus(404);
                 return;
             }
         }
         if (preCheck.rows.length === 0) {
-            console.log(2);
             res.sendStatus(404);
             return;
         }
         await db.query(editQuery, queryParams);
         res.sendStatus(200);
     } catch (e) {
+        console.log(e);
+        res.sendStatus(500);
+    }
+});
+
+app.post("/rentals", async (req, res) => {
+    const rental = rentalValidation(req.body);
+    if (!rental) {
+        res.sendStatus(400);
+        return;
+    }
+    const { customerId, gameId, daysRented } = rental;
+    try {
+        const customer = await db.query(
+            "SELECT * FROM customers WHERE id = $1",
+            [customerId]
+        );
+        if (customer.rows.length === 0) {
+            res.sendStatus(400);
+            return;
+        }
+        const game = await db.query("SELECT * FROM games WHERE id = $1", [
+            gameId,
+        ]);
+        if (game.rows.length === 0) {
+            res.sendStatus(400);
+            return;
+        }
+        const openRentals = await db.query(
+            'SELECT * FROM rentals WHERE "gameId" = $1 AND "returnDate" IS NULL',
+            [gameId]
+        );
+        if (openRentals.rows.length >= game.rows[0].stockTotal) {
+            res.sendStatus(400);
+            return;
+        }
+        const originalPrice = game.rows[0].pricePerDay * parseInt(daysRented);
+        console.log(daysRented);
+        const today = dayjs().format("YYYY-MM-DD");
+        const insertQuery = `
+            INSERT INTO rentals 
+            ("customerId", "gameId", "rentDate", "daysRented", "returnDate", "originalPrice", "delayFee") 
+            VALUES ($1, $2, $3, $4, NULL, $5, NULL)`;
+        const insertParams = [
+            customerId,
+            gameId,
+            today,
+            daysRented,
+            originalPrice,
+        ];
+        await db.query(insertQuery, insertParams);
+        res.sendStatus(201);
+    } catch (e) {
+        console.log(e);
         res.sendStatus(500);
     }
 });

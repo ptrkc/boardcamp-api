@@ -5,6 +5,7 @@ import {
     nameValidation,
     cpfValidation,
     gameValidation,
+    customerValidation,
 } from "./functions/validations.js";
 
 const app = express();
@@ -133,6 +134,32 @@ app.get("/customers/:id", async (req, res) => {
         }
     } catch (e) {
         console.log(e);
+        res.sendStatus(500);
+    }
+});
+
+app.post("/customers", async (req, res) => {
+    const customer = customerValidation(req.body);
+    if (!customer) {
+        res.sendStatus(400);
+        return;
+    }
+    const { name, phone, cpf, birthday } = customer;
+    const queryParams = [name, phone, cpf, birthday];
+    const dbQuery =
+        "INSERT INTO customers (name, phone, cpf, birthday) VALUES ($1, $2, $3, $4)";
+    try {
+        const checkCPF = await db.query(
+            "SELECT * FROM customers where cpf = $1",
+            [cpf]
+        );
+        if (checkCPF.rows.length !== 0) {
+            res.sendStatus(409);
+            return;
+        }
+        await db.query(dbQuery, queryParams);
+        res.sendStatus(201);
+    } catch (e) {
         res.sendStatus(500);
     }
 });

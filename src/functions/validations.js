@@ -1,4 +1,8 @@
 import joi from "joi";
+import dayjs from "dayjs";
+import formatParser from "dayjs/plugin/customParseFormat.js";
+
+dayjs.extend(formatParser);
 
 export function nameValidation(object) {
     const schema = joi.object({
@@ -30,4 +34,33 @@ export function gameValidation(object) {
     return error
         ? false
         : { ...object, name: object.name.trim(), image: object.image.trim() };
+}
+
+export function customerValidation(object) {
+    const schema = joi.object({
+        name: joi.string().trim().required(),
+        phone: joi
+            .string()
+            .trim()
+            .pattern(/^\d{10,11}$/)
+            .required(),
+        cpf: joi
+            .string()
+            .trim()
+            .pattern(/^\d{11}$/)
+            .required(),
+        birthday: joi.string().required(),
+    });
+    let error = schema.validate(object).error;
+    const validBirthday =
+        object.birthday &&
+        dayjs(object.birthday.trim(), "YYYY-MM-DD", true).isValid();
+    return error || !validBirthday
+        ? false
+        : {
+              name: object.name.trim(),
+              phone: object.phone.trim(),
+              cpf: object.cpf.trim(),
+              birthday: object.birthday.trim(),
+          };
 }

@@ -15,8 +15,9 @@ app.use(express.json());
 app.use(cors());
 
 app.get("/categories", async (req, res) => {
-    const filters = offsetAndLimit(req.query);
-    let query = "SELECT * FROM categories" + filters;
+    const order = setOrder(req.route.path, req.query);
+    const offsetAndLimit = setOffsetAndLimit(req.query);
+    let query = `SELECT * FROM categories ${order} ${offsetAndLimit}`;
     try {
         const categories = await db.query(query);
         res.send(categories.rows);
@@ -51,17 +52,20 @@ app.post("/categories", async (req, res) => {
 
 app.get("/games", async (req, res) => {
     let name = nameValidation(req.query);
-    const filters = offsetAndLimit(req.query);
-    let dbQuery = `
-    SELECT games.*, categories.name AS "categoryName"
-    FROM games JOIN categories ON games."categoryId" = categories.id`;
+    const order = setOrder(req.route.path, req.query);
+    const offsetAndLimit = setOffsetAndLimit(req.query);
+    let filters = "";
     let params = [];
     if (name) {
         name += "%";
-        dbQuery += " WHERE games.name ILIKE $1";
+        filters = " WHERE games.name ILIKE $1 ";
         params = [name];
     }
-    dbQuery += filters;
+    let dbQuery = `
+    SELECT games.*, categories.name AS "categoryName"
+    FROM games JOIN categories 
+    ON games."categoryId" = categories.id ${filters} ${order} ${offsetAndLimit}`;
+
     try {
         const games = await db.query(dbQuery, params);
         res.send(games.rows);
@@ -107,16 +111,17 @@ app.post("/games", async (req, res) => {
 });
 
 app.get("/customers", async (req, res) => {
-    const filters = offsetAndLimit(req.query);
+    const order = setOrder(req.route.path, req.query);
+    const offsetAndLimit = setOffsetAndLimit(req.query);
     let cpf = integerValidation(req.query.cpf);
-    let dbQuery = "SELECT * FROM customers";
+    let filters = "";
     let params = [];
     if (cpf) {
         cpf += "%";
-        dbQuery += " WHERE cpf ILIKE $1";
+        filters = " WHERE cpf ILIKE $1 ";
         params = [cpf];
     }
-    dbQuery += filters;
+    let dbQuery = `SELECT * FROM customers ${filters} ${order} ${offsetAndLimit}`;
     try {
         const customersSelect = await db.query(dbQuery, params);
         res.send(customersSelect.rows);
@@ -223,17 +228,18 @@ app.put("/customers/:id", async (req, res) => {
 app.get("/rentals", async (req, res) => {
     const customerId = integerValidation(req.query.customerId);
     const gameId = integerValidation(req.query.gameId);
-    const extraFilters = offsetAndLimit(req.query);
+    const order = setOrder(req.route.path, req.query);
+    const offsetAndLimit = setOffsetAndLimit(req.query);
     let filters = "";
     let params = [];
     if (customerId && gameId) {
-        filters = 'WHERE rentals."customerId" = $1 AND rentals."gameId" = $2';
+        filters = ' WHERE rentals."customerId" = $1 AND rentals."gameId" = $2 ';
         params = [customerId, gameId];
     } else if (customerId) {
-        filters = 'WHERE rentals."customerId" = $1';
+        filters = ' WHERE rentals."customerId" = $1 ';
         params = [customerId];
     } else if (gameId) {
-        filters = 'WHERE rentals."gameId" = $1';
+        filters = ' WHERE rentals."gameId" = $1 ';
         params = [gameId];
     }
     let dbQuery = `
@@ -248,7 +254,7 @@ app.get("/rentals", async (req, res) => {
         games ON rentals."gameId" = games.id ${filters}) q1 
     JOIN 
         (SELECT categories.name as "categoryName", categories.id FROM categories) q2 
-    ON q1."categoryId" = q2.id ${extraFilters}`;
+    ON q1."categoryId" = q2.id ${order} ${offsetAndLimit}`;
     try {
         const rawRentals = await db.query(dbQuery, params);
         const rentals = rawRentals.rows.map((r) => {
@@ -402,7 +408,7 @@ app.listen(4000, () => {
     console.log("Server started on port 4000.");
 });
 
-function offsetAndLimit(object) {
+function setOffsetAndLimit(object) {
     let filters = "";
     const offset = integerValidation(object.offset);
     const limit = integerValidation(object.limit);
@@ -414,4 +420,64 @@ function offsetAndLimit(object) {
         filters += ` LIMIT ${limit}`;
     }
     return filters;
+}
+
+function setOrder(path, query) {
+    let order = "";
+    let desc = "";
+    if (!query.order) {
+        return order;
+    }
+    if (query.desc === "true") {
+        desc = "DESC";
+    }
+    const categories = ["id", "name"];
+    const customers = ["id", "name", "phone", "cpf", "birthday"];
+    const games = [
+        "id",
+        "name",
+        "image",
+        "stockTotal",
+        "categoryId",
+        "pricePerDay",
+        "categoryName",
+    ];
+    const rentals = [
+        "id",
+        "customerId",
+        "gameId",
+        "rentDate",
+        "daysRented",
+        "returnDate",
+        "originalPrice",
+        "delayFee",
+        "customerName",
+        "gameName",
+        "categoryId",
+        "categoryName",
+    ];
+
+    switch (path) {
+        case "/categories":
+            if (categories.includes(query.order)) {
+                order = query.order;
+            }
+            break;
+        case "/customers":
+            if (customers.includes(query.order)) {
+                order = query.order;
+            }
+            break;
+        case "/games":
+            if (games.includes(query.order)) {
+                order = query.order;
+            }
+            break;
+        case "/rentals":
+            if (rentals.includes(query.order)) {
+                order = query.order;
+            }
+            break;
+    }
+    return ` ORDER BY "${order}" ${desc} `;
 }

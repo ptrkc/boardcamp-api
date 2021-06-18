@@ -10,6 +10,10 @@ import {
     integerValidation,
 } from "./functions/validations.js";
 
+import formatParser from "dayjs/plugin/customParseFormat.js";
+
+dayjs.extend(formatParser);
+
 const app = express();
 app.use(express.json());
 app.use(cors());
@@ -226,22 +230,9 @@ app.put("/customers/:id", async (req, res) => {
 });
 
 app.get("/rentals", async (req, res) => {
-    const customerId = integerValidation(req.query.customerId);
-    const gameId = integerValidation(req.query.gameId);
     const order = setOrder(req.route.path, req.query);
     const offsetAndLimit = setOffsetAndLimit(req.query);
-    let filters = "";
-    let params = [];
-    if (customerId && gameId) {
-        filters = ' WHERE rentals."customerId" = $1 AND rentals."gameId" = $2 ';
-        params = [customerId, gameId];
-    } else if (customerId) {
-        filters = ' WHERE rentals."customerId" = $1 ';
-        params = [customerId];
-    } else if (gameId) {
-        filters = ' WHERE rentals."gameId" = $1 ';
-        params = [gameId];
-    }
+    const [filters, params] = filterRentals(req.query);
     let dbQuery = `
     SELECT 
     q1.* , q2."categoryName"
@@ -424,7 +415,7 @@ function setOffsetAndLimit(object) {
 
 function setOrder(path, query) {
     let order = "";
-    let desc = "";
+    let desc = "ASC";
     if (!query.order) {
         return order;
     }
@@ -480,4 +471,46 @@ function setOrder(path, query) {
             break;
     }
     return ` ORDER BY "${order}" ${desc} `;
+}
+
+function filterRentals(query) {
+    let counter = 1;
+    const params = [];
+    let filters = "";
+    const customerId = integerValidation(query.customerId);
+    const gameId = integerValidation(query.gameId);
+    const status =
+        query.status === "open" || query.status === "closed"
+            ? query.status
+            : false;
+    const startDate = dayjs(query.startDate, "YYYY-MM-DD", true).isValid()
+        ? query.startDate
+        : false;
+    if (customerId || gameId || status || startDate) {
+        filters = " WHERE ";
+        if (customerId) {
+            filters += ` rentals."customerId" = $${counter} AND `;
+            params.push(customerId);
+            counter++;
+        }
+        if (gameId) {
+            filters += ` rentals."gameId" = $${counter} AND `;
+            params.push(gameId);
+            counter++;
+        }
+        if (status) {
+            filters += ` rentals."returnDate" IS ${
+                status === "closed" ? "NOT" : ""
+            } NULL AND `;
+        }
+        if (startDate) {
+            filters += ` rentals."rentDate" >= $${counter} AND `;
+            params.push(`"${startDate}"`);
+            counter++;
+        }
+    }
+
+    filters = filters.substring(filters.length - 4, 0);
+    console.log(customerId, gameId, status, startDate);
+    return [filters, params];
 }
